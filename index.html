@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#0c1c30">
+    <meta name="description" content="A polished Northstar Digital Bank demo.">
+    <title>Northstar — Digital Banking</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="app.js" defer></script>
+  </head>
+  <body>
+    <div id="app" aria-live="polite">
+      <section class="boot-screen" aria-label="Loading Northstar">
+        <div class="boot-brand">
+          <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
+          <span class="brand-name">Northstar</span>
+        </div>
+        <span class="spinner spinner-large" aria-hidden="true"></span>
+        <p>Loading your banking experience...</p>
+      </section>
+    </div>
+    <div id="toast-region" class="toast-region" aria-live="polite" aria-atomic="true"></div>
+  </body>
+</html>
