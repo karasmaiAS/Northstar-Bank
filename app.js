@@ -22,8 +22,10 @@ const state = {
   activePage: "dashboard",
   isNavigating: false,
   isProcessing: false,
+  carouselInterval: null,
   balance: 8246.5,
   savingsBalance: 12480,
+  monthlySpending: 2184.63,
   transactions: [
     { name: "Whole Foods Market", date: "Today, 10:42 AM", amount: -86.42, icon: "🛒" },
     { name: "Salary deposit", date: "Today, 8:15 AM", amount: 4200, icon: "↙" },
@@ -126,6 +128,13 @@ function renderOtp(error = "") {
       </section>
     </main>`;
   document.querySelector("#otp-form").addEventListener("submit", verifyOtp);
+  restrictToDigits(document.querySelector("#otp-code"));
+}
+
+function restrictToDigits(input) {
+  input?.addEventListener("input", () => {
+    input.value = input.value.replace(/\D/g, "");
+  });
 }
 
 async function verifyOtp(event) {
@@ -139,7 +148,7 @@ async function verifyOtp(event) {
   await delay(750);
   if (new FormData(form).get("otp") !== DEMO_OTP) {
     state.isProcessing = false;
-    renderOtp("That code isn't right. Check it and try again.");
+    renderOtp("Incorrect OTP number. Please try again.");
     return;
   }
   button.innerHTML = `<span aria-hidden="true">✓</span> Verified`;
@@ -186,9 +195,9 @@ function sidebarMarkup() {
     <div class="nav-caption">Your finances</div>
     <nav aria-label="Main navigation"><ul class="nav-list">${NAV_ITEMS.map(([id, label, icon]) => `
       <li><button class="nav-link ${id === state.activePage ? "active" : ""}" data-page="${id}" type="button"><span class="nav-icon" aria-hidden="true">${icon}</span>${label}</button></li>`).join("")}</ul></nav>
+    <button class="nav-link logout-link" id="logout" type="button"><span class="nav-icon" aria-hidden="true">↪</span>Sign out</button>
     <div class="sidebar-bottom">
-      <div class="help-card"><strong>Here when you need us</strong><p>Questions? Our team is ready to help, day or night.</p></div>
-      <button class="nav-link logout-link" id="logout" type="button"><span class="nav-icon" aria-hidden="true">↪</span>Log out</button>
+      <div class="help-card"><strong>Here when you need us</strong><p>Questions? Our team is ready to help, day or night.</p><a class="help-link" id="customer-service" href="#" aria-disabled="true">Customer service</a></div>
     </div>
   </aside>`;
 }
@@ -211,6 +220,8 @@ function renderDashboard() {
 
 function renderAppPage(page, options = {}) {
   if (!state.authenticated) return;
+  window.clearInterval(state.carouselInterval);
+  state.carouselInterval = null;
   state.activePage = page;
   if (state.screen !== "dashboard") {
     renderDashboardLoading();
@@ -226,6 +237,7 @@ function renderAppPage(page, options = {}) {
   wireNavigation();
   if (options.mobileOpen) document.querySelector("#sidebar")?.classList.add("mobile-open");
   wirePageEvents(page);
+  if (page === "dashboard") wireDashboardCarousel();
 }
 
 function transactionSkeletonContent() {
@@ -268,21 +280,67 @@ function pageContent(page) {
 }
 
 function dashboardContent() {
-  return `<div class="dashboard-grid">
+  return `${accountCardsMarkup(false, "account-grid dashboard-account-grid")}<div class="dashboard-grid">
     <article class="balance-card">
       <div class="balance-label">Everyday Checking balance</div>
       <div class="balance-value">${money(state.balance)}</div>
       <div class="balance-footer"><div><div class="balance-meta"><span>●</span> All accounts up to date</div><div class="balance-meta" style="margin-top:8px">Checking •••• 4829</div></div><span class="card-chip" aria-hidden="true">✦</span></div>
     </article>
-    <article class="card stat-card"><div class="stat-top"><span>Monthly spending</span><span class="stat-symbol" aria-hidden="true">↗</span></div><div><div class="stat-value">$2,184.63</div><div class="stat-caption">↓ 12% less than last month</div></div></article>
-    <article class="card quick-card"><h2 class="section-title">Quick actions</h2><div class="quick-actions">
-      ${quickAction("transfers", "⇄", "Transfer money")}${quickAction("payments", "▤", "Pay a bill")}${quickAction("cards", "▭", "Manage cards")}${quickAction("transactions", "↕", "View activity")}
-    </div></article>
+    <article class="card stat-card"><div class="stat-top"><span>Monthly spending</span><span class="stat-symbol" aria-hidden="true">↗</span></div><div><div class="stat-value">${money(state.monthlySpending)}</div><div class="stat-caption">↓ 12% less than last month</div></div></article>
+    <section class="dashboard-feature-row" aria-label="Quick actions and promotions">
+      <article class="card quick-card"><h2 class="section-title">Quick actions</h2><div class="quick-actions">
+        ${quickAction("transfers", "⇄", "Transfer money")}${quickAction("payments", "▤", "Pay a bill")}${quickAction("cards", "▭", "Manage cards")}${quickAction("transactions", "↕", "View activity")}
+      </div></article>
+      ${dashboardCarouselMarkup()}
+    </section>
     <article class="card transactions-card"><h2 class="section-title">Recent transactions<button class="view-all" type="button" data-page="transactions">View all</button></h2>${transactionRows(state.transactions.slice(0, 4))}</article>
     <article class="card chart-card"><h2 class="section-title">Spending this week</h2><div class="chart-legend"><span>Weekly overview</span><span>Last 7 days</span></div><div class="chart-amount">$486.20</div>
       <div class="bar-chart" aria-label="Weekly spending chart">${[38, 68, 47, 81, 55, 94, 63].map((height, index) => `<div class="bar-group"><div class="bar ${index === 5 ? "current" : ""}" style="height:${height}%"></div>${["M", "T", "W", "T", "F", "S", "S"][index]}</div>`).join("")}</div>
     </article>
   </div>`;
+}
+
+function dashboardCarouselMarkup() {
+  const slides = [
+    ["asset/pic1.png", "Northstar Bank new account opening promotion"],
+    ["asset/pic2.png", "Northstar Bank home loan campaign"],
+    ["asset/pic3.png", "Northstar Bank financial wellness webinar"],
+  ];
+  return `<section class="dashboard-carousel" aria-label="Northstar Bank promotions">
+    <div class="carousel-slides">${slides.map(([source, description], index) => `<img class="carousel-slide${index === 0 ? " is-active" : ""}" src="${source}" alt="${description}" aria-hidden="${index !== 0}" draggable="false">`).join("")}</div>
+    <div class="carousel-indicators" role="group" aria-label="Choose promotion">${slides.map((_, index) => `<button class="carousel-indicator${index === 0 ? " is-active" : ""}" type="button" data-slide="${index}" aria-label="Show promotion ${index + 1}" aria-pressed="${index === 0}"></button>`).join("")}</div>
+  </section>`;
+}
+
+function wireDashboardCarousel() {
+  const carousel = document.querySelector(".dashboard-carousel");
+  if (!carousel) return;
+  const slides = [...carousel.querySelectorAll(".carousel-slide")];
+  const indicators = [...carousel.querySelectorAll(".carousel-indicator")];
+  let activeSlide = 0;
+
+  const showSlide = (index) => {
+    activeSlide = index;
+    slides.forEach((slide, slideIndex) => {
+      const isActive = slideIndex === activeSlide;
+      slide.classList.toggle("is-active", isActive);
+      slide.setAttribute("aria-hidden", String(!isActive));
+    });
+    indicators.forEach((indicator, indicatorIndex) => {
+      const isActive = indicatorIndex === activeSlide;
+      indicator.classList.toggle("is-active", isActive);
+      indicator.setAttribute("aria-pressed", String(isActive));
+    });
+  };
+
+  indicators.forEach((indicator) => {
+    indicator.addEventListener("click", () => showSlide(Number(indicator.dataset.slide)));
+  });
+  if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    state.carouselInterval = window.setInterval(() => {
+      showSlide((activeSlide + 1) % slides.length);
+    }, 5000);
+  }
 }
 
 function quickAction(page, icon, label) {
@@ -293,39 +351,43 @@ function transactionRows(rows) {
   if (!rows.length) return `<div class="empty-state">No transactions to show yet.</div>`;
   return `<div class="transaction-list">${rows.map((transaction) => `<div class="transaction-row">
     <span class="transaction-icon" aria-hidden="true">${safeText(transaction.icon)}</span>
-    <div><div class="transaction-name">${safeText(transaction.name)}</div><div class="transaction-date">${safeText(transaction.date)}</div></div>
+    <div><div class="transaction-name">${safeText(transaction.name)}</div><div class="transaction-date">${safeText(transaction.date)}</div>${transaction.note ? `<div class="transaction-note">Note: ${safeText(transaction.note)}</div>` : ""}</div>
     <span class="transaction-amount ${transaction.amount > 0 ? "amount-positive" : "amount-negative"}">${transaction.amount > 0 ? "+" : "−"}${money(Math.abs(transaction.amount))}</span>
   </div>`).join("")}</div>`;
 }
 
 function accountsContent() {
-  return `<div class="account-grid">
-    <article class="card account-card"><div class="stat-top"><span>Everyday Checking</span><span class="stat-symbol">▣</span></div><div class="account-number">•••• •••• •••• 4829</div><div class="account-balance">${money(state.balance)}</div><div class="stat-caption" style="margin-top:7px">Available balance</div></article>
+  return accountCardsMarkup();
+}
+
+function accountCardsMarkup(includeChecking = true, className = "account-grid") {
+  return `<div class="${className}">
+    ${includeChecking ? `<article class="card account-card"><div class="stat-top"><span>Everyday Checking</span><span class="stat-symbol">▣</span></div><div class="account-number">•••• •••• •••• 4829</div><div class="account-balance">${money(state.balance)}</div><div class="stat-caption" style="margin-top:7px">Available balance</div></article>` : ""}
     <article class="card account-card"><div class="stat-top"><span>Growth Savings</span><span class="stat-symbol">↗</span></div><div class="account-number">•••• •••• •••• 1906</div><div class="account-balance">${money(state.savingsBalance)}</div><div class="stat-caption" style="margin-top:7px">Available balance · 3.85% APY</div></article>
   </div>`;
 }
 
 function moneyFormContent(kind) {
   const isTransfer = kind === "transfer";
-  return `<div class="action-layout"><form class="card form-card" id="${kind}-form">
+  return `<div class="action-layout ${isTransfer ? "transfer-layout" : "payment-layout"}"><form class="card form-card" id="${kind}-form">
     <h2 class="section-title">${isTransfer ? "Transfer details" : "Payment details"}</h2>
     <div class="field"><label for="${kind}-from">From account</label><select id="${kind}-from" name="from"><option value="checking">Everyday Checking ···· 4829 (${money(state.balance)})</option><option value="savings">Growth Savings ···· 1906 (${money(state.savingsBalance)})</option></select></div>
-    <div class="field"><label for="${kind}-to">${isTransfer ? "Recipient" : "Payee"}</label><input id="${kind}-to" name="recipient" placeholder="${isTransfer ? "Name or account number" : "Company or payee name"}" maxlength="60" required></div>
+    <div class="field"><label for="${kind}-to">${isTransfer ? "Account name" : "Payee"}</label><input id="${kind}-to" name="recipient" placeholder="${isTransfer ? "Name" : "Company or payee name"}" maxlength="60" ${isTransfer ? 'pattern="(?=.*[A-Za-z])[A-Za-z ]+" title="Use letters and spaces only."' : 'pattern=".*[^0-9].*" title="Enter a payee name, not only numbers."'} required></div>
+    ${isTransfer ? `<div class="field"><label for="transfer-account">Account number</label><input id="transfer-account" name="accountNumber" inputmode="numeric" pattern="[0-9]+" placeholder="Enter account number" maxlength="30" required></div>` : ""}
     <div class="field"><label for="${kind}-amount">Amount</label><input id="${kind}-amount" name="amount" type="number" min="0.01" max="${state.balance.toFixed(2)}" step="0.01" placeholder="$0.00" required></div>
-    ${isTransfer ? `<div class="field"><label for="transfer-date">When</label><select id="transfer-date" name="date"><option>Today</option><option>Schedule for later</option></select></div>` : `<div class="field"><label for="payment-account">Account number (optional)</label><input id="payment-account" name="account" placeholder="Enter account number" maxlength="30"></div>`}
-    <div class="form-note">This is a demo experience. No real money will move and no external payment will be made.</div>
+    <div class="field"><label for="${kind}-note">Note (optional)</label><textarea id="${kind}-note" name="note" maxlength="140" rows="3" placeholder="Add a note for this ${isTransfer ? "transfer" : "payment"}"></textarea></div>
     <p class="form-error" role="alert"></p>
     <button class="btn btn-full" type="submit">Confirm ${isTransfer ? "Transfer" : "Payment"}</button>
-  </form><aside class="card side-note"><h3>${isTransfer ? "Secure transfers" : "Simple bill pay"}</h3><p>${isTransfer ? "Review the recipient and amount before confirming. Transfers in this demo update your sample account balance only." : "Enter a payee and amount to simulate a payment. Your sample balance and activity update when the payment completes."}</p></aside></div>`;
+  </form><aside class="card side-note"><h3>${isTransfer ? "Secure transfers" : "Simple bill pay"}</h3><p>${isTransfer ? "Review the account name, account number, and amount before confirming your transfer." : "Enter a payee and amount to confirm payment."}</p></aside></div>`;
 }
 
 function transactionsContent() {
-  return `<div class="card content-card" id="transactions-card"><div class="section-title">All activity <span class="text-muted" style="font:400 10px 'DM Sans',sans-serif">Everyday Checking ···· 4829</span></div><div class="transaction-list">${[...state.transactions].map((transaction) => `<div class="transaction-row"><span class="transaction-icon" aria-hidden="true">${safeText(transaction.icon)}</span><div><div class="transaction-name">${safeText(transaction.name)}</div><div class="transaction-date">${safeText(transaction.date)}</div></div><span class="transaction-amount ${transaction.amount > 0 ? "amount-positive" : "amount-negative"}">${transaction.amount > 0 ? "+" : "−"}${money(Math.abs(transaction.amount))}</span></div>`).join("")}</div></div>`;
+  return `<div class="card content-card" id="transactions-card"><div class="section-title">All activity <span class="text-muted" style="font:400 10px 'DM Sans',sans-serif">Everyday Checking ···· 4829</span></div><div class="transaction-list">${[...state.transactions].map((transaction) => `<div class="transaction-row"><span class="transaction-icon" aria-hidden="true">${safeText(transaction.icon)}</span><div><div class="transaction-name">${safeText(transaction.name)}</div><div class="transaction-date">${safeText(transaction.date)}</div>${transaction.note ? `<div class="transaction-note">Note: ${safeText(transaction.note)}</div>` : ""}</div><span class="transaction-amount ${transaction.amount > 0 ? "amount-positive" : "amount-negative"}">${transaction.amount > 0 ? "+" : "−"}${money(Math.abs(transaction.amount))}</span></div>`).join("")}</div></div>`;
 }
 
 function cardsContent() {
   return `<div class="account-grid">
-    <article class="card account-card"><div class="stat-top"><span>Northstar Debit</span><span class="status-pill">Active</span></div><div style="margin:31px 0 24px;color:#61718a;font-size:12px;letter-spacing:2px">•••• &nbsp; •••• &nbsp; •••• &nbsp; 4829</div><div class="stat-top"><span>Alex Morgan</span><span>VISA</span></div></article>
+    <article class="card account-card debit-card"><div class="stat-top"><span>Northstar Debit</span><span class="status-pill">Active</span></div><div class="debit-number">•••• &nbsp; •••• &nbsp; •••• &nbsp; 4829</div><div class="stat-top"><span>Alex Morgan</span><span class="debit-network">VISA</span></div></article>
     <article class="card account-card"><div class="stat-top"><span>Card controls</span><span class="stat-symbol">⚙</span></div><div class="setting-row"><div><strong>Online purchases</strong><small>Use your card online</small></div><button class="toggle" role="switch" aria-checked="true" aria-label="Online purchases"></button></div><div class="setting-row"><div><strong>International use</strong><small>Purchases outside the US</small></div><button class="toggle" role="switch" aria-checked="false" aria-label="International use"></button></div></article>
   </div>`;
 }
@@ -336,7 +398,7 @@ function billsContent() {
 }
 
 function profileContent() {
-  return `<div class="action-layout"><div class="card content-card"><div class="profile-hero"><div class="avatar">AM</div><div><h2>Alex Morgan</h2><p>Northstar member since 2022</p></div></div><ul class="info-list"><li><span>Email</span><span>alex.morgan@example.com</span></li><li><span>Phone</span><span>(555) 014-2389</span></li><li><span>Mailing address</span><span>125 Northstar Ave, Seattle, WA</span></li><li><span>Membership</span><span>Personal Banking</span></li></ul></div><aside class="card side-note"><h3>Your information is protected</h3><p>We use strong encryption and account safeguards to help protect your personal details.</p></aside></div>`;
+  return `<div class="action-layout profile-layout"><div class="card content-card"><div class="profile-hero"><div class="avatar">AM</div><div><h2>Alex Morgan</h2><p>Northstar member since 2014</p></div></div><ul class="info-list"><li><span>Email</span><span>alex.morgan@gmail.com</span></li><li><span>Phone</span><span>+63 917 555 0131</span></li><li><span>Mailing address</span><span>A. Luna, Taguig, 1630 Metro Manila</span></li><li><span>Membership</span><span>Personal Banking</span></li></ul></div><aside class="card side-note"><h3>Your information is protected</h3><p>We use strong encryption and account safeguards to help protect your personal details.</p></aside></div>`;
 }
 
 function settingsContent() {
@@ -354,7 +416,8 @@ function wireNavigation() {
   document.querySelector("#mobile-menu")?.addEventListener("click", () => {
     document.querySelector("#sidebar")?.classList.toggle("mobile-open");
   });
-  document.querySelector("#logout")?.addEventListener("click", logOut);
+  document.querySelector("#logout")?.addEventListener("click", confirmLogOut);
+  document.querySelector("#customer-service")?.addEventListener("click", (event) => event.preventDefault());
 }
 
 async function navigate(page) {
@@ -376,6 +439,7 @@ async function navigate(page) {
 }
 
 function wirePageEvents(page) {
+  restrictToDigits(document.querySelector("#transfer-account"));
   if (page === "transfers" || page === "payments") {
     document.querySelector(`#${page === "transfers" ? "transfer" : "payment"}-form`)?.addEventListener("submit", processMoney);
     const accountSelect = document.querySelector('select[name="from"]');
@@ -397,6 +461,8 @@ async function processMoney(event) {
   const formData = new FormData(form);
   const amount = Number(formData.get("amount"));
   const recipient = String(formData.get("recipient") || "").trim();
+  const recipientAccount = String(formData.get("accountNumber") || "");
+  const note = String(formData.get("note") || "").trim();
   const account = formData.get("from") === "savings" ? "savings" : "checking";
   const availableBalance = account === "savings" ? state.savingsBalance : state.balance;
   const error = form.querySelector(".form-error");
@@ -404,11 +470,75 @@ async function processMoney(event) {
     error.textContent = "Enter a valid recipient and an amount greater than zero.";
     return;
   }
+  if (type === "payment" && /^[0-9]+$/.test(recipient)) {
+    error.textContent = "Enter a payee name, not only numbers.";
+    return;
+  }
+  if (type === "transfer" && !/^(?=.*[A-Za-z])[A-Za-z ]+$/.test(recipient)) {
+    error.textContent = "Enter an account name using letters and spaces only.";
+    return;
+  }
+  if (type === "transfer" && !/^\d+$/.test(recipientAccount)) {
+    error.textContent = "Enter an account number using digits only.";
+    return;
+  }
   if (amount > availableBalance) {
     error.textContent = `The amount is greater than your available ${account} balance.`;
     return;
   }
   error.textContent = "";
+  state.isProcessing = true;
+  showMoneyConfirmation(form, type, recipient, recipientAccount, amount, account, note);
+}
+
+function showMoneyConfirmation(form, type, recipient, recipientAccount, amount, account, note) {
+  const isTransfer = type === "transfer";
+  const accountName = account === "savings" ? "Growth Savings ···· 1906" : "Everyday Checking ···· 4829";
+  const title = isTransfer ? "Review transfer" : "Review payment";
+  const actionLabel = isTransfer ? "Confirm transfer" : "Confirm payment";
+  const overlay = document.createElement("div");
+  overlay.className = "processing-overlay confirmation-overlay";
+  overlay.innerHTML = `<section class="processing-card confirmation-card" role="alertdialog" aria-modal="true" aria-labelledby="money-confirm-title" aria-describedby="money-confirm-message">
+    <div class="confirmation-heading">
+      <div class="processing-icon" aria-hidden="true">${isTransfer ? "⇄" : "▤"}</div>
+      <div><h2 id="money-confirm-title">${title}</h2><p id="money-confirm-message">Check the details before confirming.</p></div>
+    </div>
+    <div class="confirmation-amount-label">Amount</div>
+    <div class="confirmation-amount">${money(amount)}</div>
+    <dl class="confirmation-details">
+      <div><dt>${isTransfer ? "Account name" : "Payee"}</dt><dd>${safeText(recipient)}</dd></div>
+      ${isTransfer ? `<div><dt>Account number</dt><dd>${safeText(recipientAccount)}</dd></div>` : ""}
+      <div><dt>From account</dt><dd>${safeText(accountName)}</dd></div>
+      ${note ? `<div><dt>Note</dt><dd>${safeText(note)}</dd></div>` : ""}
+    </dl>
+    <div class="confirmation-actions"><button class="btn btn-secondary" id="cancel-money" type="button">Cancel</button><button class="btn" id="confirm-money" type="button">${actionLabel}</button></div>
+  </section>`;
+
+  const closeConfirmation = () => {
+    document.removeEventListener("keydown", handleKeydown);
+    overlay.remove();
+    state.isProcessing = false;
+    form.querySelector('button[type="submit"]')?.focus();
+  };
+  const handleKeydown = (event) => {
+    if (event.key === "Escape") closeConfirmation();
+  };
+
+  overlay.querySelector("#cancel-money").addEventListener("click", closeConfirmation);
+  overlay.querySelector("#confirm-money").addEventListener("click", () => {
+    document.removeEventListener("keydown", handleKeydown);
+    overlay.remove();
+    processValidatedMoney(form, type, amount, recipient, note, account);
+  });
+  overlay.addEventListener("click", (event) => {
+    if (event.target === overlay) closeConfirmation();
+  });
+  document.addEventListener("keydown", handleKeydown);
+  document.body.append(overlay);
+  overlay.querySelector("#cancel-money").focus();
+}
+
+async function processValidatedMoney(form, type, amount, recipient, note, account) {
   state.isProcessing = true;
   const button = form.querySelector('button[type="submit"]');
   button.disabled = true;
@@ -426,18 +556,20 @@ async function processMoney(event) {
     } else {
       state.balance = Math.round((state.balance - amount) * 100) / 100;
     }
+    state.monthlySpending = Math.round((state.monthlySpending + amount) * 100) / 100;
     state.transactions.unshift({
       name: `${type === "transfer" ? "Transfer to" : "Payment to"} ${recipient}`,
       date: "Just now",
       amount: -amount,
       icon: type === "transfer" ? "⇄" : "▤",
+      ...(note ? { note } : {}),
     });
     overlay.innerHTML = `<div class="processing-card" role="status" aria-live="polite"><div class="success-mark" aria-hidden="true">✓</div><h2>${success}</h2><p>${money(amount)} ${type === "transfer" ? "sent to" : "paid to"} ${safeText(recipient)}.</p></div>`;
     await delay(1000);
     overlay.remove();
     state.isProcessing = false;
     renderAppPage(type === "transfer" ? "transfers" : "payments");
-    showToast(`${success}. Your demo balance has been updated.`);
+    showToast(`${success}. Your balance has been updated.`);
   } catch (operationError) {
     overlay.remove();
     state.isProcessing = false;
@@ -460,6 +592,40 @@ async function logOut() {
   state.isProcessing = false;
   overlay.remove();
   renderLogin();
+}
+
+function confirmLogOut(event) {
+  if (state.isProcessing) return;
+  const trigger = event.currentTarget;
+  const overlay = document.createElement("div");
+  overlay.className = "processing-overlay confirmation-overlay";
+  overlay.innerHTML = `<section class="processing-card confirmation-card" role="alertdialog" aria-modal="true" aria-labelledby="sign-out-title" aria-describedby="sign-out-message">
+    <div class="processing-icon" aria-hidden="true">↪</div>
+    <h2 id="sign-out-title">Sign out?</h2>
+    <p id="sign-out-message">Are you sure you want to sign out of your account?</p>
+    <div class="confirmation-actions"><button class="btn btn-secondary" id="cancel-sign-out" type="button">No</button><button class="btn" id="confirm-sign-out" type="button">Yes</button></div>
+  </section>`;
+
+  const closeConfirmation = () => {
+    document.removeEventListener("keydown", handleKeydown);
+    overlay.remove();
+    trigger.focus();
+  };
+  const handleKeydown = (keyEvent) => {
+    if (keyEvent.key === "Escape") closeConfirmation();
+  };
+
+  overlay.querySelector("#cancel-sign-out").addEventListener("click", closeConfirmation);
+  overlay.querySelector("#confirm-sign-out").addEventListener("click", () => {
+    closeConfirmation();
+    logOut();
+  });
+  overlay.addEventListener("click", (clickEvent) => {
+    if (clickEvent.target === overlay) closeConfirmation();
+  });
+  document.addEventListener("keydown", handleKeydown);
+  document.body.append(overlay);
+  overlay.querySelector("#cancel-sign-out").focus();
 }
 
 function start() {
