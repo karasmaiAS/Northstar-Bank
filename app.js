@@ -7,6 +7,7 @@ const NAV_ITEMS = [
   ["cards", "Cards", "▭"],
   ["bills", "Bills", "≡"],
   ["profile", "Profile", "◉"],
+  ["sessions", "Login sessions", "◷"],
   ["settings", "Settings", "⚙"],
 ];
 
@@ -26,6 +27,15 @@ const state = {
   balance: 8246.5,
   savingsBalance: 12480,
   monthlySpending: 2184.63,
+  securityEvents: [
+    {
+      title: "Suspicious sign-in attempt",
+      date: "Today, 11:58 AM",
+      device: "Windows 11",
+      location: "Location: Washington D.C.",
+      detail: "A sign-in attempt was blocked because this device hasn't been seen before.",
+    },
+  ],
   transactions: [
     { name: "Whole Foods Market", date: "Today, 10:42 AM", amount: -86.42, icon: "🛒" },
     { name: "Salary deposit", date: "Today, 8:15 AM", amount: 4200, icon: "↙" },
@@ -96,6 +106,7 @@ async function signIn(event) {
   await delay(850);
   const formData = new FormData(form);
   if (formData.get("accountNumber") !== DEMO_ACCOUNT || formData.get("password") !== DEMO_PASSWORD) {
+    recordSuspiciousSignIn("Incorrect account number or password");
     state.isProcessing = false;
     renderLogin("That account number and password don't match. Please try again.");
     return;
@@ -147,6 +158,7 @@ async function verifyOtp(event) {
   button.innerHTML = `<span class="spinner spinner-light" aria-hidden="true"></span> Verifying...`;
   await delay(750);
   if (new FormData(form).get("otp") !== DEMO_OTP) {
+    recordSuspiciousSignIn("Incorrect verification code");
     state.isProcessing = false;
     renderOtp("Incorrect OTP number. Please try again.");
     return;
@@ -165,6 +177,19 @@ async function verifyOtp(event) {
 
 function delay(milliseconds) {
   return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+}
+
+function recordSuspiciousSignIn(reason) {
+  state.securityEvents.unshift({
+    title: "Suspicious sign-in attempt",
+    date: new Intl.DateTimeFormat("en-US", {
+      dateStyle: "medium",
+      timeStyle: "short",
+    }).format(new Date()),
+    device: "This browser",
+    location: "Location not verified",
+    detail: `${reason}. The attempt was not authorized.`,
+  });
 }
 
 function renderDashboardLoading() {
@@ -190,11 +215,12 @@ function renderDashboardLoading() {
 }
 
 function sidebarMarkup() {
+  const securityEventCount = state.securityEvents.length;
   return `<aside class="sidebar" id="sidebar">
     <div class="sidebar-brand">${brand()}</div>
     <div class="nav-caption">Your finances</div>
     <nav aria-label="Main navigation"><ul class="nav-list">${NAV_ITEMS.map(([id, label, icon]) => `
-      <li><button class="nav-link ${id === state.activePage ? "active" : ""}" data-page="${id}" type="button"><span class="nav-icon" aria-hidden="true">${icon}</span>${label}</button></li>`).join("")}</ul></nav>
+      <li><button class="nav-link ${id === state.activePage ? "active" : ""}" data-page="${id}" type="button"><span class="nav-icon" aria-hidden="true">${icon}</span>${label}${id === "sessions" && securityEventCount ? `<span class="nav-badge" aria-label="${securityEventCount} suspicious sign-in ${securityEventCount === 1 ? "attempt" : "attempts"}">${securityEventCount}</span>` : ""}</button></li>`).join("")}</ul></nav>
     <button class="nav-link logout-link" id="logout" type="button"><span class="nav-icon" aria-hidden="true">↪</span>Sign out</button>
     <div class="sidebar-bottom">
       <div class="help-card"><strong>Here when you need us</strong><p>Questions? Our team is ready to help, day or night.</p><a class="help-link" id="customer-service" href="#" aria-disabled="true">Customer service</a></div>
@@ -258,6 +284,7 @@ function pageHeading(page) {
     cards: ["Your cards", "Manage the cards connected to your account."],
     bills: ["Bills & subscriptions", "Stay on top of what's due and what's coming up."],
     profile: ["Your profile", "Manage your personal account details."],
+    sessions: ["Login sessions", "Review active access and sign-in activity for your account."],
     settings: ["Settings", "Choose how Northstar works for you."],
   };
   const [title, subtitle] = headings[page] || headings.dashboard;
@@ -274,6 +301,7 @@ function pageContent(page) {
     cards: cardsContent,
     bills: billsContent,
     profile: profileContent,
+    sessions: sessionsContent,
     settings: settingsContent,
   };
   return (templates[page] || dashboardContent)();
@@ -403,6 +431,25 @@ function profileContent() {
 
 function settingsContent() {
   return `<div class="settings-grid"><section class="card content-card"><h2 class="section-title">Notifications</h2>${settingRow("Account activity", "Get notified about deposits and withdrawals", true)}${settingRow("Bill reminders", "A heads-up before bills are due", true)}${settingRow("Product updates", "News about Northstar features", false)}</section><section class="card content-card"><h2 class="section-title">Privacy & security</h2>${settingRow("Biometric sign-in", "Use your device's biometrics", false)}${settingRow("Remember this device", "Keep this device trusted", true)}</section></div>`;
+}
+
+function sessionsContent() {
+  return `<div class="session-list">
+    <section class="card session-card">
+      <div class="session-card-heading"><div><span class="session-eyebrow">Current session</span><h2>This device</h2></div><span class="status-pill">Active now</span></div>
+      <p class="session-detail">You are currently signed in to Northstar on this device.</p>
+      <div class="session-meta"><span>Session status</span><strong>Protected with verification</strong></div>
+    </section>
+    <section class="card content-card">
+      <h2 class="section-title">Recent sign-in activity <span class="nav-badge">${state.securityEvents.length} detected</span></h2>
+      <div class="security-event-list">${state.securityEvents.map((event) => `<article class="security-event">
+        <span class="security-event-icon" aria-hidden="true">!</span>
+        <div class="security-event-content"><div class="security-event-heading"><h3>${safeText(event.title)}</h3><span class="security-status">Blocked</span></div>
+          <p>${safeText(event.detail)}</p><div class="security-event-meta"><span>${safeText(event.device)}</span><span>${safeText(event.location)}</span><time>${safeText(event.date)}</time></div>
+        </div>
+      </article>`).join("")}</div>
+    </section>
+  </div>`;
 }
 
 function settingRow(title, description, checked) {
